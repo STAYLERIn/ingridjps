@@ -9,6 +9,53 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Great+Vibes&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+#lockScreen{
+position:fixed;
+inset:0;
+background:linear-gradient(180deg,#fbe9ec,#f2d0ca);
+display:flex;
+align-items:center;
+justify-content:center;
+z-index:9999;
+}
+
+.lock-box{
+background:white;
+padding:30px;
+border-radius:20px;
+box-shadow:0 20px 40px rgba(0,0,0,.15);
+text-align:center;
+width:280px;
+}
+
+.lock-box input{
+width:100%;
+padding:12px;
+margin-top:10px;
+border-radius:10px;
+border:1px solid #ccc;
+font-size:18px;
+text-align:center;
+}
+
+.lock-box button{
+margin-top:10px;
+padding:12px;
+width:100%;
+border:none;
+background:#b4475f;
+color:white;
+border-radius:10px;
+font-weight:bold;
+cursor:pointer;
+}
+
+#errorMsg{
+color:red;
+font-size:14px;
+display:block;
+margin-top:5px;
+}
     :root {
       --bg-1: #fbe9ec;
       --bg-2: #f2d0ca;
@@ -655,6 +702,17 @@
   </style>
 </head>
 <body>
+<div id="lockScreen">
+  <div class="lock-box">
+    <h2>Acesso restrito</h2>
+    <p>Digite o código para abrir a carta</p>
+
+    <input type="password" id="passwordInput" placeholder="•••">
+    <button onclick="checkPassword()">Entrar</button>
+
+    <span id="errorMsg"></span>
+  </div>
+</div>
   <main class="page">
     <section class="panel hero">
       <span class="eyebrow">Carta digital para Ingrid, a Japa</span>
@@ -748,6 +806,39 @@
   </main>
 
   <script>
+
+	const passwords = [
+"987",
+"654",
+"321",
+"963",
+"852",
+"741",
+"159",
+"753",
+"951"
+];
+
+let index = localStorage.getItem("senhaIndex") || 0;
+
+function checkPassword(){
+const input = document.getElementById("passwordInput").value;
+
+if(input === passwords[index]){
+    
+    document.getElementById("lockScreen").style.display="none";
+    
+    index++;
+    if(index >= passwords.length){
+        index = 0;
+    }
+
+    localStorage.setItem("senhaIndex", index);
+}
+else{
+    document.getElementById("errorMsg").textContent="Senha incorreta";
+}
+}
     const letters = [
       {
         day: "Domingo",
