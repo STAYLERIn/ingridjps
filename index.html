@@ -243,13 +243,6 @@
       line-height: 1.55;
     }
 
-    .music-link {
-      display: block;
-      margin-top: 12px;
-      text-align: center;
-      text-decoration: none;
-    }
-
     .youtube-shell {
       width: min(100%, 320px);
       margin: 12px auto 0;
@@ -258,6 +251,18 @@
       background: #000;
       box-shadow: 0 16px 28px rgba(79, 41, 49, 0.14);
       aspect-ratio: 16 / 9;
+      opacity: 0;
+      max-height: 0;
+      transform: translateY(10px);
+      transition: opacity 260ms ease, transform 260ms ease, max-height 260ms ease, margin-top 260ms ease;
+      pointer-events: none;
+    }
+
+    .youtube-shell.is-live {
+      opacity: 1;
+      max-height: 260px;
+      transform: translateY(0);
+      pointer-events: auto;
     }
 
     .youtube-shell iframe,
@@ -672,24 +677,28 @@
 
       <div class="hero-actions">
         <button class="primary-btn" id="openLetterBtn" type="button">Abrir carta de hoje</button>
-        <button class="secondary-btn" id="musicBtn" type="button">Tocar música do YouTube</button>
+        <button class="secondary-btn" id="musicBtn" type="button">Tocar música de hoje no site</button>
       </div>
 
       <p class="hint">
-        No iPhone e em outros celulares, a música só começa depois do toque no botão. Vou deixar essa faixa em volume baixo e, se o navegador travar o autoplay, o player aparece logo abaixo para tocar manualmente.
+        Quando a carta estiver aberta por um endereço web, a música toca aqui mesmo dentro do site. No iPhone, o play começa depois do toque no botão.
       </p>
 
-      <div class="music-dock" id="musicDock" hidden>
-        <span class="music-label">Música escolhida</span>
-        <strong class="music-title">A trilha que o Wendryl separou para a Ingrid</strong>
+      <div class="music-dock" id="musicDock">
+        <span class="music-label">Música de hoje</span>
+        <strong class="music-title" id="musicTitle">Carregando música do dia...</strong>
         <p class="music-status-text" id="musicStatus">
-          Toque no botão para ouvir essa música do YouTube junto com a carta.
+          Um clássico romântico diferente aparece sozinho a cada dia da semana.
         </p>
-        <a class="secondary-btn music-link" id="youtubeLink" href="https://www.youtube.com/watch?v=EnK7qb2bkhI" target="_blank" rel="noopener" hidden>
-          Abrir música no YouTube
-        </a>
-        <div class="youtube-shell" id="youtubeShell" hidden>
-          <div id="youtubePlayer"></div>
+        <div class="youtube-shell" id="youtubeShell">
+          <iframe
+            id="youtubeFrame"
+            title="Música do dia"
+            src="about:blank"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            referrerpolicy="strict-origin-when-cross-origin"
+            allowfullscreen
+          ></iframe>
         </div>
       </div>
 
@@ -842,18 +851,68 @@
     const letterBody = document.getElementById("letterBody");
     const letterCard = document.getElementById("letterCard");
     const musicDock = document.getElementById("musicDock");
+    const musicTitle = document.getElementById("musicTitle");
     const musicStatus = document.getElementById("musicStatus");
-    const youtubeLink = document.getElementById("youtubeLink");
     const youtubeShell = document.getElementById("youtubeShell");
-    const youtubePlayerHost = document.getElementById("youtubePlayer");
+    const youtubeFrame = document.getElementById("youtubeFrame");
+
+    const songs = [
+      {
+        day: "Domingo",
+        title: "Can't Help Falling in Love",
+        artist: "Elvis Presley",
+        videoId: "vGJTaP6anOU",
+        note: "Um clássico suave e certeiro para abrir a semana com romantismo."
+      },
+      {
+        day: "Segunda-feira",
+        title: "Truly Madly Deeply",
+        artist: "Savage Garden",
+        videoId: "WQnAxOQxQIU",
+        note: "Uma daquelas declarações românticas conhecidas no mundo inteiro."
+      },
+      {
+        day: "Terça-feira",
+        title: "I Will Always Love You",
+        artist: "Whitney Houston",
+        videoId: "3JWTaaS7LdU",
+        note: "Balada gigante, intensa e impossível de passar despercebida."
+      },
+      {
+        day: "Quarta-feira",
+        title: "My Heart Will Go On",
+        artist: "Celine Dion",
+        videoId: "FHG2oizTlpY",
+        note: "Romance clássico mundial, com cara de amor cinematográfico."
+      },
+      {
+        day: "Quinta-feira",
+        title: "Unchained Melody",
+        artist: "The Righteous Brothers",
+        videoId: "qiiyq2xrSI0",
+        note: "Um clássico imenso, daqueles que já nasceram românticos."
+      },
+      {
+        day: "Sexta-feira",
+        title: "(Everything I Do) I Do It for You",
+        artist: "Bryan Adams",
+        videoId: "Y0pdQU87dc8",
+        note: "Famosa no planeta inteiro e perfeita para uma sexta mais marcante."
+      },
+      {
+        day: "Sábado",
+        title: "Perfect",
+        artist: "Ed Sheeran",
+        videoId: "2Vv-BfVoq4g",
+        note: "Uma romântica moderna e gigante para fechar a semana com leveza."
+      }
+    ];
 
     const todayIndex = new Date().getDay();
     const todayLetter = letters[todayIndex];
+    const todaySong = songs[todayIndex];
     let isOpen = false;
-    const youtubeVideoId = "EnK7qb2bkhI";
-    const youtubeEmbedBase = "https://www.youtube.com/embed/" + youtubeVideoId;
-    const youtubeWatchUrl = "https://www.youtube.com/watch?v=" + youtubeVideoId;
-    const isLocalFile = window.location.protocol === "file:";
+    let isSongPlaying = false;
 
     const friendlyDate = new Intl.DateTimeFormat("pt-BR", {
       weekday: "long",
@@ -875,6 +934,12 @@
       letterBody.innerHTML = todayLetter.paragraphs.map((paragraph) => "<p>" + paragraph + "</p>").join("");
     }
 
+    function renderTodaySong() {
+      musicTitle.textContent = todaySong.title + " — " + todaySong.artist;
+      musicStatus.textContent = todaySong.day + ": " + todaySong.note;
+      musicBtn.textContent = "Tocar música de " + todaySong.day.toLowerCase();
+    }
+
     function openLetter() {
       if (!isOpen) {
         stage.classList.add("is-open");
@@ -890,209 +955,48 @@
     }
 
     renderTodayLetter();
+    renderTodaySong();
     openLetterBtn.addEventListener("click", openLetter);
 
-    let musicEnabled = false;
-    let youtubePlayer;
-    let youtubeApiPromise;
-    let youtubePlayerPromise;
-    let pendingPlayAfterLoad = false;
-    let fallbackMode = false;
-
-    function revealMusicDock() {
-      musicDock.hidden = false;
+    function buildEmbedUrl(videoId, autoplay) {
+      const origin = encodeURIComponent(window.location.origin);
+      return "https://www.youtube-nocookie.com/embed/" + videoId + "?playsinline=1&autoplay=" + (autoplay ? "1" : "0") + "&rel=0&modestbranding=1&enablejsapi=1&origin=" + origin;
     }
 
-    function setMusicStatus(message) {
-      musicStatus.textContent = message;
+    function stopTodaySong() {
+      youtubeFrame.src = "about:blank";
+      youtubeShell.classList.remove("is-live");
+      musicBtn.textContent = "Tocar música de " + todaySong.day.toLowerCase();
+      musicStatus.textContent = todaySong.day + ": " + todaySong.note;
+      isSongPlaying = false;
     }
 
-    function showYoutubeLink(message) {
-      youtubeShell.hidden = true;
-      youtubeLink.hidden = false;
-      musicBtn.textContent = "Abrir música no YouTube";
-      setMusicStatus(message);
+    function playTodaySong() {
+      youtubeFrame.src = buildEmbedUrl(todaySong.videoId, true);
+      youtubeShell.classList.add("is-live");
+      musicBtn.textContent = "Parar música";
+      musicStatus.textContent = "Tocando agora no site: " + todaySong.title + " — " + todaySong.artist + ".";
+      isSongPlaying = true;
+
+      window.setTimeout(() => {
+        youtubeShell.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 120);
     }
 
-    function showEmbeddedPlayer(message) {
-      youtubeLink.hidden = true;
-      youtubeShell.hidden = false;
-      setMusicStatus(message);
-    }
-
-    function loadYouTubeApi() {
-      if (window.YT && window.YT.Player) {
-        return Promise.resolve();
-      }
-
-      if (youtubeApiPromise) {
-        return youtubeApiPromise;
-      }
-
-      youtubeApiPromise = new Promise((resolve, reject) => {
-        const existingScript = document.getElementById("youtube-iframe-api");
-
-        if (existingScript) {
-          const startedAt = Date.now();
-          const poll = window.setInterval(() => {
-            if (window.YT && window.YT.Player) {
-              window.clearInterval(poll);
-              resolve();
-            } else if (Date.now() - startedAt > 10000) {
-              window.clearInterval(poll);
-              reject(new Error("youtube-api-timeout"));
-            }
-          }, 200);
-          return;
-        }
-
-        const previousReady = window.onYouTubeIframeAPIReady;
-        const script = document.createElement("script");
-        const timeout = window.setTimeout(() => reject(new Error("youtube-api-timeout")), 10000);
-
-        window.onYouTubeIframeAPIReady = () => {
-          window.clearTimeout(timeout);
-          if (typeof previousReady === "function") {
-            previousReady();
-          }
-          resolve();
-        };
-
-        script.id = "youtube-iframe-api";
-        script.src = "https://www.youtube.com/iframe_api";
-        script.async = true;
-        script.onerror = () => {
-          window.clearTimeout(timeout);
-          reject(new Error("youtube-api-load-failed"));
-        };
-
-        document.head.appendChild(script);
-      });
-
-      return youtubeApiPromise;
-    }
-
-    async function ensureYouTubePlayer() {
-      if (fallbackMode) {
-        return null;
-      }
-
-      if (youtubePlayerPromise) {
-        return youtubePlayerPromise;
-      }
-
-      youtubePlayerPromise = loadYouTubeApi().then(() => new Promise((resolve, reject) => {
-        youtubeShell.hidden = false;
-        youtubePlayer = new window.YT.Player("youtubePlayer", {
-          videoId: youtubeVideoId,
-          playerVars: {
-            playsinline: 1,
-            rel: 0,
-            controls: 1,
-            modestbranding: 1,
-            loop: 1,
-            playlist: youtubeVideoId
-          },
-          events: {
-            onReady: (event) => {
-              event.target.setVolume(18);
-              event.target.pauseVideo();
-              resolve(event.target);
-
-              if (pendingPlayAfterLoad) {
-                event.target.playVideo();
-              }
-            },
-            onStateChange: (event) => {
-              if (!window.YT || !window.YT.PlayerState) {
-                return;
-              }
-
-              if (event.data === window.YT.PlayerState.PLAYING) {
-                musicEnabled = true;
-                musicBtn.textContent = "Pausar música";
-                setMusicStatus("Tocando a música em volume baixo. Se o iPhone travar, use o play do quadro.");
-              } else if (event.data === window.YT.PlayerState.PAUSED && !pendingPlayAfterLoad) {
-                musicEnabled = false;
-                musicBtn.textContent = "Tocar música do YouTube";
-                setMusicStatus("Música pausada. Toque no botão para continuar.");
-              } else if (event.data === window.YT.PlayerState.ENDED) {
-                event.target.seekTo(0);
-                event.target.playVideo();
-              }
-            },
-            onError: () => {
-              reject(new Error("youtube-player-error"));
-            }
-          }
-        });
-      })).catch((error) => {
-        fallbackMode = true;
-        youtubePlayerPromise = null;
-        throw error;
-      });
-
-      return youtubePlayerPromise;
-    }
-
-    async function toggleMusic() {
-      revealMusicDock();
-
-      if (isLocalFile) {
-        showYoutubeLink("Como essa carta está aberta como arquivo local, o YouTube não toca embutido aqui. Toque abaixo para abrir a música direto no YouTube no iPhone.");
-        window.open(youtubeWatchUrl, "_blank", "noopener");
+    function toggleTodaySong() {
+      if (window.location.protocol === "file:") {
+        musicStatus.textContent = "Para tocar dentro do site, essa carta precisa abrir por um endereço web. Vou usar a versão local via navegador agora.";
         return;
       }
 
-      if (fallbackMode) {
-        showYoutubeLink("O YouTube bloqueou o player embutido neste navegador. Deixei o atalho para abrir a faixa direto no YouTube.");
-        window.open(youtubeWatchUrl, "_blank", "noopener");
-        return;
+      if (isSongPlaying) {
+        stopTodaySong();
+      } else {
+        playTodaySong();
       }
-
-      showEmbeddedPlayer("Carregando sua música. Se o iPhone bloquear, toque no play dentro do quadro.");
-      pendingPlayAfterLoad = !musicEnabled;
-
-      try {
-        const player = await ensureYouTubePlayer();
-
-        if (!player) {
-          return;
-        }
-
-        if (!musicEnabled) {
-          player.setVolume(18);
-          player.playVideo();
-          musicEnabled = true;
-          musicBtn.textContent = "Pausar música";
-          setMusicStatus("Carregando sua música. Se o iPhone bloquear, toque no play dentro do quadro.");
-        } else {
-          pendingPlayAfterLoad = false;
-          player.pauseVideo();
-          musicEnabled = false;
-          musicBtn.textContent = "Tocar música do YouTube";
-          setMusicStatus("Música pausada. Toque no botão para continuar.");
-        }
-      } catch (error) {
-        fallbackMode = true;
-        showYoutubeLink("O YouTube bloqueou o player embutido aqui. Toque abaixo para abrir a música direto no YouTube.");
-        window.open(youtubeWatchUrl, "_blank", "noopener");
-        return;
-      }
-
-      pendingPlayAfterLoad = false;
     }
 
-    if (isLocalFile) {
-      musicBtn.textContent = "Abrir música no YouTube";
-      setMusicStatus("Como esse arquivo abre localmente, a música é enviada para o próprio YouTube para funcionar melhor no iPhone.");
-    } else {
-      loadYouTubeApi().catch(() => {
-        setMusicStatus("O player do YouTube será carregado quando você tocar no botão.");
-      });
-    }
-
-    musicBtn.addEventListener("click", toggleMusic);
+    musicBtn.addEventListener("click", toggleTodaySong);
   </script>
 </body>
 </html>
