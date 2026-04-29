@@ -210,6 +210,64 @@
       line-height: 1.55;
     }
 
+    .music-dock {
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: 20px;
+      background: rgba(255, 247, 241, 0.9);
+      border: 1px solid rgba(142, 51, 72, 0.08);
+      box-shadow: 0 14px 26px rgba(92, 43, 54, 0.08);
+    }
+
+    .music-label {
+      display: block;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--rose-strong);
+    }
+
+    .music-title {
+      display: block;
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 1rem;
+      font-weight: 800;
+    }
+
+    .music-status-text {
+      margin: 8px 0 0;
+      color: var(--ink-soft);
+      font-size: 0.84rem;
+      line-height: 1.55;
+    }
+
+    .music-link {
+      display: block;
+      margin-top: 12px;
+      text-align: center;
+      text-decoration: none;
+    }
+
+    .youtube-shell {
+      width: min(100%, 320px);
+      margin: 12px auto 0;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #000;
+      box-shadow: 0 16px 28px rgba(79, 41, 49, 0.14);
+      aspect-ratio: 16 / 9;
+    }
+
+    .youtube-shell iframe,
+    .youtube-shell > div {
+      width: 100%;
+      height: 100%;
+      border: 0;
+      display: block;
+    }
+
     .status {
       margin-top: 18px;
       padding: 14px;
@@ -614,12 +672,26 @@
 
       <div class="hero-actions">
         <button class="primary-btn" id="openLetterBtn" type="button">Abrir carta de hoje</button>
-        <button class="secondary-btn" id="musicBtn" type="button">Ligar música suave</button>
+        <button class="secondary-btn" id="musicBtn" type="button">Tocar música do YouTube</button>
       </div>
 
       <p class="hint">
-        No iPhone e em outros celulares, a música só começa depois do toque no botão. O volume fica baixinho para não pesar.
+        No iPhone e em outros celulares, a música só começa depois do toque no botão. Vou deixar essa faixa em volume baixo e, se o navegador travar o autoplay, o player aparece logo abaixo para tocar manualmente.
       </p>
+
+      <div class="music-dock" id="musicDock" hidden>
+        <span class="music-label">Música escolhida</span>
+        <strong class="music-title">A trilha que o Wendryl separou para a Ingrid</strong>
+        <p class="music-status-text" id="musicStatus">
+          Toque no botão para ouvir essa música do YouTube junto com a carta.
+        </p>
+        <a class="secondary-btn music-link" id="youtubeLink" href="https://www.youtube.com/watch?v=EnK7qb2bkhI" target="_blank" rel="noopener" hidden>
+          Abrir música no YouTube
+        </a>
+        <div class="youtube-shell" id="youtubeShell" hidden>
+          <div id="youtubePlayer"></div>
+        </div>
+      </div>
 
       <div class="status">
         <span class="status-label">Carta do dia</span>
@@ -769,10 +841,19 @@
     const letterSubtitle = document.getElementById("letterSubtitle");
     const letterBody = document.getElementById("letterBody");
     const letterCard = document.getElementById("letterCard");
+    const musicDock = document.getElementById("musicDock");
+    const musicStatus = document.getElementById("musicStatus");
+    const youtubeLink = document.getElementById("youtubeLink");
+    const youtubeShell = document.getElementById("youtubeShell");
+    const youtubePlayerHost = document.getElementById("youtubePlayer");
 
     const todayIndex = new Date().getDay();
     const todayLetter = letters[todayIndex];
     let isOpen = false;
+    const youtubeVideoId = "EnK7qb2bkhI";
+    const youtubeEmbedBase = "https://www.youtube.com/embed/" + youtubeVideoId;
+    const youtubeWatchUrl = "https://www.youtube.com/watch?v=" + youtubeVideoId;
+    const isLocalFile = window.location.protocol === "file:";
 
     const friendlyDate = new Intl.DateTimeFormat("pt-BR", {
       weekday: "long",
@@ -811,61 +892,204 @@
     renderTodayLetter();
     openLetterBtn.addEventListener("click", openLetter);
 
-    let audioContext;
-    let musicInterval;
     let musicEnabled = false;
+    let youtubePlayer;
+    let youtubeApiPromise;
+    let youtubePlayerPromise;
+    let pendingPlayAfterLoad = false;
+    let fallbackMode = false;
 
-    const chords = [
-      [261.63, 329.63, 392.0],
-      [220.0, 277.18, 329.63],
-      [246.94, 311.13, 392.0],
-      [196.0, 246.94, 329.63]
-    ];
-
-    function playTone(frequency, startTime, duration, volume, type) {
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
-
-      oscillator.type = type;
-      oscillator.frequency.setValueAtTime(frequency, startTime);
-
-      gainNode.gain.setValueAtTime(0.0001, startTime);
-      gainNode.gain.linearRampToValueAtTime(volume, startTime + 0.18);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
-
-      oscillator.connect(gainNode).connect(audioContext.destination);
-      oscillator.start(startTime);
-      oscillator.stop(startTime + duration + 0.02);
+    function revealMusicDock() {
+      musicDock.hidden = false;
     }
 
-    function schedulePad() {
-      const startAt = audioContext.currentTime + 0.08;
-      const chord = chords[Math.floor(Math.random() * chords.length)];
+    function setMusicStatus(message) {
+      musicStatus.textContent = message;
+    }
 
-      chord.forEach((note, index) => {
-        playTone(note, startAt + index * 0.16, 2.8, index === 0 ? 0.018 : 0.01, index === 0 ? "triangle" : "sine");
+    function showYoutubeLink(message) {
+      youtubeShell.hidden = true;
+      youtubeLink.hidden = false;
+      musicBtn.textContent = "Abrir música no YouTube";
+      setMusicStatus(message);
+    }
+
+    function showEmbeddedPlayer(message) {
+      youtubeLink.hidden = true;
+      youtubeShell.hidden = false;
+      setMusicStatus(message);
+    }
+
+    function loadYouTubeApi() {
+      if (window.YT && window.YT.Player) {
+        return Promise.resolve();
+      }
+
+      if (youtubeApiPromise) {
+        return youtubeApiPromise;
+      }
+
+      youtubeApiPromise = new Promise((resolve, reject) => {
+        const existingScript = document.getElementById("youtube-iframe-api");
+
+        if (existingScript) {
+          const startedAt = Date.now();
+          const poll = window.setInterval(() => {
+            if (window.YT && window.YT.Player) {
+              window.clearInterval(poll);
+              resolve();
+            } else if (Date.now() - startedAt > 10000) {
+              window.clearInterval(poll);
+              reject(new Error("youtube-api-timeout"));
+            }
+          }, 200);
+          return;
+        }
+
+        const previousReady = window.onYouTubeIframeAPIReady;
+        const script = document.createElement("script");
+        const timeout = window.setTimeout(() => reject(new Error("youtube-api-timeout")), 10000);
+
+        window.onYouTubeIframeAPIReady = () => {
+          window.clearTimeout(timeout);
+          if (typeof previousReady === "function") {
+            previousReady();
+          }
+          resolve();
+        };
+
+        script.id = "youtube-iframe-api";
+        script.src = "https://www.youtube.com/iframe_api";
+        script.async = true;
+        script.onerror = () => {
+          window.clearTimeout(timeout);
+          reject(new Error("youtube-api-load-failed"));
+        };
+
+        document.head.appendChild(script);
       });
 
-      playTone(chord[1] * 2, startAt + 1.25, 1.8, 0.004, "sine");
+      return youtubeApiPromise;
+    }
+
+    async function ensureYouTubePlayer() {
+      if (fallbackMode) {
+        return null;
+      }
+
+      if (youtubePlayerPromise) {
+        return youtubePlayerPromise;
+      }
+
+      youtubePlayerPromise = loadYouTubeApi().then(() => new Promise((resolve, reject) => {
+        youtubeShell.hidden = false;
+        youtubePlayer = new window.YT.Player("youtubePlayer", {
+          videoId: youtubeVideoId,
+          playerVars: {
+            playsinline: 1,
+            rel: 0,
+            controls: 1,
+            modestbranding: 1,
+            loop: 1,
+            playlist: youtubeVideoId
+          },
+          events: {
+            onReady: (event) => {
+              event.target.setVolume(18);
+              event.target.pauseVideo();
+              resolve(event.target);
+
+              if (pendingPlayAfterLoad) {
+                event.target.playVideo();
+              }
+            },
+            onStateChange: (event) => {
+              if (!window.YT || !window.YT.PlayerState) {
+                return;
+              }
+
+              if (event.data === window.YT.PlayerState.PLAYING) {
+                musicEnabled = true;
+                musicBtn.textContent = "Pausar música";
+                setMusicStatus("Tocando a música em volume baixo. Se o iPhone travar, use o play do quadro.");
+              } else if (event.data === window.YT.PlayerState.PAUSED && !pendingPlayAfterLoad) {
+                musicEnabled = false;
+                musicBtn.textContent = "Tocar música do YouTube";
+                setMusicStatus("Música pausada. Toque no botão para continuar.");
+              } else if (event.data === window.YT.PlayerState.ENDED) {
+                event.target.seekTo(0);
+                event.target.playVideo();
+              }
+            },
+            onError: () => {
+              reject(new Error("youtube-player-error"));
+            }
+          }
+        });
+      })).catch((error) => {
+        fallbackMode = true;
+        youtubePlayerPromise = null;
+        throw error;
+      });
+
+      return youtubePlayerPromise;
     }
 
     async function toggleMusic() {
-      if (!musicEnabled) {
-        audioContext = audioContext || new (window.AudioContext || window.webkitAudioContext)();
+      revealMusicDock();
 
-        if (audioContext.state === "suspended") {
-          await audioContext.resume();
+      if (isLocalFile) {
+        showYoutubeLink("Como essa carta está aberta como arquivo local, o YouTube não toca embutido aqui. Toque abaixo para abrir a música direto no YouTube no iPhone.");
+        window.open(youtubeWatchUrl, "_blank", "noopener");
+        return;
+      }
+
+      if (fallbackMode) {
+        showYoutubeLink("O YouTube bloqueou o player embutido neste navegador. Deixei o atalho para abrir a faixa direto no YouTube.");
+        window.open(youtubeWatchUrl, "_blank", "noopener");
+        return;
+      }
+
+      showEmbeddedPlayer("Carregando sua música. Se o iPhone bloquear, toque no play dentro do quadro.");
+      pendingPlayAfterLoad = !musicEnabled;
+
+      try {
+        const player = await ensureYouTubePlayer();
+
+        if (!player) {
+          return;
         }
 
-        schedulePad();
-        musicInterval = window.setInterval(schedulePad, 3200);
-        musicEnabled = true;
-        musicBtn.textContent = "Pausar música";
-      } else {
-        window.clearInterval(musicInterval);
-        musicEnabled = false;
-        musicBtn.textContent = "Ligar música suave";
+        if (!musicEnabled) {
+          player.setVolume(18);
+          player.playVideo();
+          musicEnabled = true;
+          musicBtn.textContent = "Pausar música";
+          setMusicStatus("Carregando sua música. Se o iPhone bloquear, toque no play dentro do quadro.");
+        } else {
+          pendingPlayAfterLoad = false;
+          player.pauseVideo();
+          musicEnabled = false;
+          musicBtn.textContent = "Tocar música do YouTube";
+          setMusicStatus("Música pausada. Toque no botão para continuar.");
+        }
+      } catch (error) {
+        fallbackMode = true;
+        showYoutubeLink("O YouTube bloqueou o player embutido aqui. Toque abaixo para abrir a música direto no YouTube.");
+        window.open(youtubeWatchUrl, "_blank", "noopener");
+        return;
       }
+
+      pendingPlayAfterLoad = false;
+    }
+
+    if (isLocalFile) {
+      musicBtn.textContent = "Abrir música no YouTube";
+      setMusicStatus("Como esse arquivo abre localmente, a música é enviada para o próprio YouTube para funcionar melhor no iPhone.");
+    } else {
+      loadYouTubeApi().catch(() => {
+        setMusicStatus("O player do YouTube será carregado quando você tocar no botão.");
+      });
     }
 
     musicBtn.addEventListener("click", toggleMusic);
